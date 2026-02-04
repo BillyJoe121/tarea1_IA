@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rotten Tomatoes - Detector IA</title>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;600&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --primary: #E02401;
+            /* Tomato Red */
+            --primary-dark: #9E1901;
+            --background: #0F0F0F;
+            /* Dark cinema background */
+            --surface: #1A1A1A;
+            --text-main: #FFFFFF;
+            --text-secondary: #A3A3A3;
+            --success: #4ADE80;
+            --warning: #FACC15;
+            --card-border: #333;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--background);
+            color: var(--text-main);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        header {
+            width: 100%;
+            padding: 1.5rem 0;
+            background-color: var(--surface);
+            border-bottom: 2px solid var(--primary);
+            text-align: center;
+            margin-bottom: 2rem;
+            box-shadow: 0 10px 30px rgba(224, 36, 1, 0.15);
+        }
+
+        h1 {
+            margin: 0;
+            font-family: 'Bebas Neue', cursive;
+            font-size: 2.5rem;
+            letter-spacing: 2px;
+            color: var(--primary);
+            text-shadow: 2px 2px 0px rgba(0, 0, 0, 0.5);
+        }
+
+        h1 span {
+            color: var(--text-main);
+        }
+
+        main {
+            width: 90%;
+            max-width: 500px;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            align-items: center;
+        }
+
+        .camera-wrapper {
+            position: relative;
+            width: 100%;
+            background: #000;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            border: 1px solid var(--card-border);
+        }
+
+        .camera-container {
+            width: 100%;
+            aspect-ratio: 1/1;
+            /* Square aspect ratio usually matches TM models */
+            position: relative;
+        }
+
+        #webcam-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #000;
+        }
+
+        #webcam-container canvas {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .loading-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(15, 15, 15, 0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 1rem;
+            text-align: center;
+            z-index: 10;
+        }
+
+        .loading-overlay.hidden {
+            display: none;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(224, 36, 1, 0.3);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 1rem;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .results-container {
+            width: 100%;
+            background-color: var(--surface);
+            padding: 1.5rem;
+            border-radius: 12px;
+            border: 1px solid var(--card-border);
+            box-sizing: border-box;
+        }
+
+        .prediction-item {
+            margin-bottom: 1.2rem;
+        }
+
+        .prediction-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .prediction-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+            font-size: 1rem;
+            font-weight: 600;
+        }
+
+        .class-name {
+            color: var(--text-main);
+        }
+
+        .probability-value {
+            color: var(--primary);
+            font-family: monospace;
+        }
+
+        .bar-bg {
+            width: 100%;
+            height: 12px;
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .bar-fill {
+            height: 100%;
+            background-color: var(--primary);
+            width: 0%;
+            border-radius: 6px;
+            /* Faster transition for fluid feel, reliable to high FPS updates */
+            transition: width 0.1s linear;
+        }
+
+        /* Highlight specific classes if needed, or just top pick */
+        .prediction-item.top-pick .bar-fill {
+            background-color: var(--success);
+            box-shadow: 0 0 10px rgba(74, 222, 128, 0.4);
+        }
+
+        .prediction-item.top-pick .class-name {
+            color: var(--success);
+        }
+
+        .btn {
+            padding: 0.75rem 2rem;
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: 'Inter', sans-serif;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .btn:hover {
+            background-color: var(--primary-dark);
+        }
+
+        .btn:disabled {
+            background-color: #555;
+            cursor: not-allowed;
+        }
+
+        .error-msg {
+            color: #EF4444;
+            margin-top: 1rem;
+            font-size: 0.9rem;
+            line-height: 1.4;
+        }
+    </style>
+</head>
+
+<body>
+
+    <header>
+        <h1>ROTTEN <span>TOMATOES</span></h1>
+    </header>
+
+    <main>
+        <div class="camera-wrapper">
+            <div class="camera-container">
+                <div id="loading" class="loading-overlay">
+                    <div class="spinner"></div>
+                    <p id="status-text">Cargando modelo de IA...</p>
+                </div>
+                <div id="error-overlay" class="loading-overlay hidden">
+                    <p style="font-size: 2rem;">😕</p>
+                    <p id="error-msg" class="error-msg"></p>
+                    <button class="btn" onclick="location.reload()" style="margin-top:1rem;">Recargar</button>
+                </div>
+                <div id="start-overlay" class="loading-overlay hidden" style="background: rgba(0,0,0,0.7);">
+                    <button id="start-btn" class="btn" onclick="init()">Activar Cámara</button>
+                </div>
+                <div id="webcam-container"></div>
+            </div>
+        </div>
+
+        <div id="label-container" class="results-container">
+            <!-- Bars injected via JS -->
+        </div>
+    </main>
+
+    <!-- TensorFlow & Teachable Machine Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    <script
+        src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+
+    <script type="text/javascript">
+        // Using "modelo" directory as confirmed
+        const URL_MODEL = "/static/modelo/";
+
+        let model, webcam, labelContainer, maxPredictions;
+        let isRunning = false;
+
+        async function loadModel() {
+            const modelURL = URL_MODEL + "model.json";
+            const metadataURL = URL_MODEL + "metadata.json";
+
+            try {
+                // Load model
+                model = await tmImage.load(modelURL, metadataURL);
+                maxPredictions = model.getTotalClasses();
+
+                // Hide loading, show start button
+                document.getElementById('loading').classList.add('hidden');
+                document.getElementById('start-overlay').classList.remove('hidden');
+
+                // Prepare Label Container
+                labelContainer = document.getElementById("label-container");
+                labelContainer.innerHTML = '';
+
+                // Get labels from metadata if available, else generic
+                const labels = model.getClassLabels();
+
+                for (let i = 0; i < maxPredictions; i++) {
+                    const labelName = labels[i] || `Clase ${i}`;
+                    const shouldHide = labelName.toLowerCase().includes("no tomate");
+
+                    const div = document.createElement("div");
+                    div.className = "prediction-item";
+                    if (shouldHide) {
+                        div.style.display = 'none';
+                    }
+                    div.innerHTML = `
+                        <div class="prediction-header">
+                            <span class="class-name">${labelName}</span>
+                            <span class="probability-value">0%</span>
+                        </div>
+                        <div class="bar-bg">
+                            <div class="bar-fill" style="width: 0%"></div>
+                        </div>
+                    `;
+                    labelContainer.appendChild(div);
+                }
+
+            } catch (error) {
+                showError("No se pudo cargar el modelo. Verifica que los archivos .json y .bin estén en static/modelo/");
+                console.error(error);
+            }
+        }
+
+        async function init() {
+            if (isRunning) return;
+
+            const startOverlay = document.getElementById('start-overlay');
+            const startBtn = document.getElementById('start-btn');
+            startBtn.innerText = "ACCEDIENDO A CÁMARA...";
+
+            try {
+                const flip = false; // "environment" usuallly doesn't mirror
+                // TM models often standard 224, but we can capture higher and resize
+                const width = 400;
+                const height = 400;
+
+                webcam = new tmImage.Webcam(width, height, flip);
+
+                // ATTEMPT 1: Try Environment Camera
+                try {
+                    await webcam.setup({ facingMode: "environment" });
+                } catch (e1) {
+                    console.warn("Environment cam failed, trying default user cam...", e1);
+                    // ATTEMPT 2: Try Default/User Camera
+                    await webcam.setup(); // Fallback to default
+                }
+
+                // If we got here, camera is setup
+                await webcam.play();
+                window.requestAnimationFrame(loop);
+
+                // Update UI
+                const wcContainer = document.getElementById("webcam-container");
+                wcContainer.innerHTML = "";
+                wcContainer.appendChild(webcam.canvas);
+
+                startOverlay.classList.add('hidden');
+                isRunning = true;
+
+            } catch (e) {
+                console.error("Camera Error:", e);
+
+                let msg = "No se pudo acceder a la cámara.";
+
+                if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+                    msg += "<br><br><strong>IMPORTANTE:</strong> Los navegadores bloquean la cámara en conexiones no seguras (HTTP) excepto en localhost.<br>Si estás en celular, necesitas HTTPS o conectar por cable y depurar.";
+                } else {
+                    msg += "<br><br>Verifica que has dado permisos en el navegador.";
+                }
+
+                showError(msg);
+                startBtn.innerText = "REINTENTAR";
+            }
+        }
+
+        function showError(msg) {
+            const errOverlay = document.getElementById('error-overlay');
+            const loadOverlay = document.getElementById('loading');
+            const startOverlay = document.getElementById('start-overlay');
+
+            loadOverlay.classList.add('hidden');
+            startOverlay.classList.add('hidden');
+            errOverlay.classList.remove('hidden');
+            document.getElementById('error-msg').innerHTML = msg;
+        }
+
+        async function loop() {
+            webcam.update();
+            await predict();
+            window.requestAnimationFrame(loop);
+        }
+
+        async function predict() {
+            // Predict
+            const prediction = await model.predict(webcam.canvas);
+
+            let highestProb = 0;
+            let highestIndex = -1;
+
+            for (let i = 0; i < maxPredictions; i++) {
+                const prob = prediction[i].probability;
+                // Use slightly faster updates for "fluid" feel
+                const percentage = (prob * 100).toFixed(1) + "%";
+
+                const item = labelContainer.childNodes[i];
+                const probSpan = item.querySelector(".probability-value");
+                const barFill = item.querySelector(".bar-fill");
+
+                probSpan.innerHTML = percentage;
+                barFill.style.width = percentage;
+
+                if (prob > highestProb) {
+                    highestProb = prob;
+                    highestIndex = i;
+                }
+
+                item.classList.remove("top-pick");
+            }
+
+            if (highestIndex !== -1) {
+                const winnerItem = labelContainer.childNodes[highestIndex];
+                if (winnerItem.style.display !== 'none') {
+                    winnerItem.classList.add("top-pick");
+                }
+            }
+        }
+
+        // Init
+        loadModel();
+    </script>
+</body>
+
+</html>
